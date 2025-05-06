@@ -52,20 +52,22 @@ type rawJSON struct {
 type ProfileStats struct {
 	Name string `json:"name"`
 
-	// Restore-size stats
+	// Restore‑size stats
 	RestoreBytes int64  `json:"restore_bytes"`
 	RestoreHuman string `json:"restore_human"`
 	RestoreFiles int64  `json:"restore_files"`
 
-	// Raw-data stats
-	RawBytes            int64   `json:"raw_bytes"`
-	RawHuman            string  `json:"raw_human"`
-	UncompBytes         int64   `json:"uncompressed_bytes"`
-	UncompHuman         string  `json:"uncompressed_human"`
-	CompressRatio       float64 `json:"compression_ratio"`
-	CompressionSavingPc float64 `json:"compression_space_saving"`
-	CompressionProgPct  int64   `json:"compression_progress"`
-	RawBlobs            int64   `json:"raw_blob_count"`
+	// Raw‑data stats
+	RawBytes               int64   `json:"raw_bytes"`
+	RawHuman               string  `json:"raw_human"`
+	UncompBytes            int64   `json:"uncompressed_bytes"`
+	UncompHuman            string  `json:"uncompressed_human"`
+	CompressRatio          float64 `json:"compression_ratio"`
+	CompressRatioHuman     string  `json:"compression_ratio_human"`
+	CompressionSavingPc    float64 `json:"compression_space_saving"`
+	CompressionSavingHuman string  `json:"compression_space_saving_human"`
+	CompressionProgPct     int64   `json:"compression_progress"`
+	RawBlobs               int64   `json:"raw_blob_count"`
 
 	// Common
 	Snapshots int64 `json:"snapshots"`
@@ -84,7 +86,7 @@ func main() {
 
 	http.HandleFunc("/stats", statsHandler)
 
-	log.Println("Listening on :8080 ...")
+	log.Println("Listening on :8080 🚀")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatalf("http server: %v", err)
 	}
@@ -100,7 +102,6 @@ func statsHandler(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(res)
 }
 
-// getStats ensures only one concurrent refresh and returns cachedData if fresh
 func getStats() ([]ProfileStats, error) {
 	cacheMu.RLock()
 	if time.Since(cachedAt) < time.Duration(cacheSeconds)*time.Second && cachedData != nil {
@@ -141,13 +142,11 @@ func getStats() ([]ProfileStats, error) {
 	return stats, err
 }
 
-// generateStats walks dataRoot and runs restic stats for each profile
 func generateStats() ([]ProfileStats, error) {
 	entries, err := os.ReadDir(dataRoot)
 	if err != nil {
 		return nil, err
 	}
-
 	var stats []ProfileStats
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -169,19 +168,21 @@ func generateStats() ([]ProfileStats, error) {
 		}
 
 		stats = append(stats, ProfileStats{
-			Name:                name,
-			RestoreBytes:        restore.TotalSize,
-			RestoreHuman:        human(bytes(float64(restore.TotalSize))),
-			RestoreFiles:        restore.TotalFileCount,
-			RawBytes:            raw.TotalSize,
-			RawHuman:            human(bytes(float64(raw.TotalSize))),
-			UncompBytes:         raw.TotalUncompressed,
-			UncompHuman:         human(bytes(float64(raw.TotalUncompressed))),
-			CompressRatio:       raw.CompressionRatio,
-			CompressionSavingPc: raw.CompressionSavingPct,
-			CompressionProgPct:  raw.CompressionProgress,
-			RawBlobs:            raw.TotalBlobCount,
-			Snapshots:           restore.SnapshotsCount,
+			Name:                   name,
+			RestoreBytes:           restore.TotalSize,
+			RestoreHuman:           human(bytes(float64(restore.TotalSize))),
+			RestoreFiles:           restore.TotalFileCount,
+			RawBytes:               raw.TotalSize,
+			RawHuman:               human(bytes(float64(raw.TotalSize))),
+			UncompBytes:            raw.TotalUncompressed,
+			UncompHuman:            human(bytes(float64(raw.TotalUncompressed))),
+			CompressRatio:          raw.CompressionRatio,
+			CompressRatioHuman:     fmt.Sprintf("%.2f", raw.CompressionRatio),
+			CompressionSavingPc:    raw.CompressionSavingPct,
+			CompressionSavingHuman: fmt.Sprintf("%.2f%%", raw.CompressionSavingPct),
+			CompressionProgPct:     raw.CompressionProgress,
+			RawBlobs:               raw.TotalBlobCount,
+			Snapshots:              restore.SnapshotsCount,
 		})
 	}
 	return stats, nil
