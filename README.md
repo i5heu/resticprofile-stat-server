@@ -97,6 +97,49 @@ DATA_ROOT=/backups RESTICPROFILE_BINARY=/usr/local/bin/resticprofile ./stat-serv
 * The server is stateless and can be restarted at any time. It will re-scan the directories.
 * The server is designed to be run in a container, e.g. Docker or Kubernetes.
 
+## Glance Example Configuration
+
+If you want to use this with [Glance](https://github.com/glanceapp/glance), you can use the following example configuration:
+
+```yaml
+- type: custom-api
+  title: Restic Stats
+  cache: 1m # REST API already cached ⇒ 1‑minute refresh is fine
+  url: http://localhost:8080/stats
+  template: |
+    <div class="space-vertical-10 list">
+    {{ range .JSON.Array "" }}
+      <!-- Profile card -->
+      <div class="card padding-10">
+        <!-- repo name & snapshot age -->
+        <div class="flex justify-between">
+          <div class="size-h4 color-highlight">{{ .String "name" }}</div>
+          <div class="size-h5 color-positive">{{ .String "last_snapshot" }}</div>
+        </div>
+
+        <ul class="list-vertical-text size-h7 margin-top-5">
+          <li><b>Raw Size:</b> {{ .String "raw_human" }}</li>
+          <li><b>Files:</b> {{ .Int "restore_files" | formatNumber }}</li>
+          <li><b>Snapshots:</b> {{ .Int "snapshots" }}</li>
+        </ul>
+
+        <ul class="list-horizontal-text size-h6">
+          <li><b>Ratio:</b> {{ .String "compression_ratio_human" }}</li>
+          <li><b>Savings:</b> {{ .String "compression_space_saving_human" }}</li>
+          <li><b>Uncompressed:</b> {{ .String "uncompressed_human" }}</li>
+          <li><b>Restore Size:</b> {{ .String "restore_human" }}</li>
+        </ul>
+
+        <!-- per‑path last snapshot list (collapses after 4 items) -->
+        <ul class="list list-gap-5 collapsible-container size-h6 margin-top-5" data-collapse-after="4">
+        {{ range .Array "paths" }}
+          <li><span class="color-muted">{{ .String "path" }}</span> – {{ .String "last_snapshot" }}</li>
+        {{ end }}
+        </ul>
+      </div>
+    {{ end }}
+    </div>
+```
 
 ## License
 
