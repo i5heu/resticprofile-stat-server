@@ -107,8 +107,8 @@ func main() {
 
 	http.HandleFunc("/stats", statsHandler)
 
-	log.Println("Listening on :8086 🚀")
-	log.Fatal(http.ListenAndServe(":8086", nil))
+	log.Println("Listening on :8080 🚀")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
 
 /* ─── HTTP handler & caching ──────────────────────────────────────────────── */
