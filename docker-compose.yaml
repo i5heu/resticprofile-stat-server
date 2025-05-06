@@ -1,5 +1,6 @@
 services:
   stats:
+    image: ghcr.io/i5heu/resticprofile-stat-server:latest
     build: .
     container_name: resticprofile-stat-server
     ports:
@@ -9,3 +10,4 @@ services:
     volumes:
       - ./data:/data:ro        # read‑only backup profiles
     restart: unless-stopped
+    

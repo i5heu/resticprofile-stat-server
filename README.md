@@ -1,3 +1,9 @@
+![Language](https://img.shields.io/github/languages/count/i5heu/resticprofile-stat-server)
+![GitHub top language](https://img.shields.io/github/languages/top/i5heu/resticprofile-stat-server)
+![GitHub release (latest by date)](https://img.shields.io/github/v/release/i5heu/resticprofile-stat-server)
+![Docker pulls](https://img.shields.io/docker/pulls/i5heu/resticprofile-stat-server)
+
+
 # resticprofile-stat-server
 
 A lightweight Go server that scans multiple `resticprofile` configurations (one per subdirectory) and serves detailed, **cached backup statistics** over HTTP.
@@ -49,6 +55,19 @@ It parses the structured JSON output, combines it, and exposes the result at [ht
 
 ## Run It
 
+If you use **docker-composes** see the [docker-compose.yml](docker-compose.yml) file for an example.
+
+### With Docker
+
+```bash
+docker run -d \
+  --name resticprofile-stat-server \
+  -p 8080:8080 \
+  -v ./data:/data \
+  ghcr.io/i5heu/resticprofile-stat-server:latest
+```
+
+### Without Docker
 ```bash
 go build -o stat-server
 ./stat-server
