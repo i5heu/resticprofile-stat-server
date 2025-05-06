@@ -22,9 +22,13 @@ var (
 	resticBinary string
 	cacheSeconds int
 
-	mu         sync.RWMutex
+	cacheMu    sync.RWMutex // protects cachedData & cachedAt
 	cachedAt   time.Time
 	cachedData []ProfileStats
+
+	computeMu   sync.Mutex // serialises expensive refresh
+	computing   bool       // true while a refresh is running
+	computeCond = sync.NewCond(&computeMu)
 )
 
 // Raw JSON from resticprofile
@@ -48,12 +52,12 @@ type rawJSON struct {
 type ProfileStats struct {
 	Name string `json:"name"`
 
-	// Restore‑size stats
+	// Restore-size stats
 	RestoreBytes int64  `json:"restore_bytes"`
 	RestoreHuman string `json:"restore_human"`
 	RestoreFiles int64  `json:"restore_files"`
 
-	// Raw‑data stats
+	// Raw-data stats
 	RawBytes            int64   `json:"raw_bytes"`
 	RawHuman            string  `json:"raw_human"`
 	UncompBytes         int64   `json:"uncompressed_bytes"`
@@ -80,7 +84,7 @@ func main() {
 
 	http.HandleFunc("/stats", statsHandler)
 
-	log.Println("Listening on :8080...")
+	log.Println("Listening on :8080 ...")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
 		log.Fatalf("http server: %v", err)
 	}
@@ -93,27 +97,52 @@ func statsHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(res); err != nil {
-		log.Printf("encode response: %v", err)
-	}
+	_ = json.NewEncoder(w).Encode(res)
 }
 
+// getStats ensures only one concurrent refresh and returns cachedData if fresh
 func getStats() ([]ProfileStats, error) {
-	// Cache check (read lock)
-	mu.RLock()
+	cacheMu.RLock()
 	if time.Since(cachedAt) < time.Duration(cacheSeconds)*time.Second && cachedData != nil {
-		defer mu.RUnlock()
+		defer cacheMu.RUnlock()
 		return cachedData, nil
 	}
-	mu.RUnlock()
+	cacheMu.RUnlock()
 
-	// Acquire write lock
-	mu.Lock()
-	defer mu.Unlock()
+	computeMu.Lock()
+	for computing {
+		computeCond.Wait()
+	}
+	cacheMu.RLock()
 	if time.Since(cachedAt) < time.Duration(cacheSeconds)*time.Second && cachedData != nil {
+		cacheMu.RUnlock()
+		computeMu.Unlock()
 		return cachedData, nil
 	}
+	cacheMu.RUnlock()
 
+	computing = true
+	computeMu.Unlock()
+
+	stats, err := generateStats()
+
+	cacheMu.Lock()
+	if err == nil {
+		cachedData = stats
+		cachedAt = time.Now()
+	}
+	cacheMu.Unlock()
+
+	computeMu.Lock()
+	computing = false
+	computeCond.Broadcast()
+	computeMu.Unlock()
+
+	return stats, err
+}
+
+// generateStats walks dataRoot and runs restic stats for each profile
+func generateStats() ([]ProfileStats, error) {
 	entries, err := os.ReadDir(dataRoot)
 	if err != nil {
 		return nil, err
@@ -155,13 +184,10 @@ func getStats() ([]ProfileStats, error) {
 			Snapshots:           restore.SnapshotsCount,
 		})
 	}
-
-	cachedData = stats
-	cachedAt = time.Now()
 	return stats, nil
 }
 
-// helpers
+// runAndParse executes resticprofile in dir, streams logs, and parses first JSON line into v
 func runAndParse(dir, mode string, v interface{}) error {
 	cmd := exec.Command(resticBinary, "stats", "--mode", mode, "--json")
 	cmd.Dir = dir
@@ -181,7 +207,6 @@ func runAndParse(dir, mode string, v interface{}) error {
 		line := scanner.Bytes()
 		os.Stdout.Write(line)
 		os.Stdout.Write([]byte{'\n'})
-
 		if len(line) > 0 && line[0] == '{' {
 			if err := json.Unmarshal(line, v); err != nil {
 				return fmt.Errorf("decode %s JSON: %w", mode, err)
@@ -195,6 +220,7 @@ func runAndParse(dir, mode string, v interface{}) error {
 	return cmd.Wait()
 }
 
+// human converts bytes to IEC units (KiB, MiB, GiB, TiB, …)
 func human(b bytes) string {
 	const unit = 1024.0
 	if b < unit {
