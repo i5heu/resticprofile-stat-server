@@ -75,7 +75,7 @@ type ProfileStats struct {
 
 func init() {
 	dataRoot = getenvOr("DATA_ROOT", "/data")
-	resticBinary = getenvOr("RESTICPROFILE_BINARY", "/resticprofile")
+	resticBinary = getenvOr("RESTICPROFILE_BINARY", "/usr/local/bin/resticprofile")
 	cacheSeconds = getCacheSeconds()
 }
 

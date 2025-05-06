@@ -1,0 +1,11 @@
+services:
+  stats:
+    build: .
+    container_name: resticprofile-stat-server
+    ports:
+      - "8086:8080"         
+    environment:
+      CACHE_SECONDS: "11700"  
+    volumes:
+      - ./data:/data:ro        # read‑only backup profiles
+    restart: unless-stopped
