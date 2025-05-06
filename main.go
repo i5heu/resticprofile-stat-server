@@ -15,23 +15,24 @@ import (
 	"time"
 )
 
-const defaultCache = 3600 // 1 hour default cache
+const defaultCache = 3600 // 1 h
 
 var (
 	dataRoot     string
 	resticBinary string
 	cacheSeconds int
 
-	cacheMu    sync.RWMutex // protects cachedData & cachedAt
+	cacheMu    sync.RWMutex
 	cachedAt   time.Time
 	cachedData []ProfileStats
 
-	computeMu   sync.Mutex // serialises expensive refresh
-	computing   bool       // true while a refresh is running
+	computeMu   sync.Mutex
+	computing   bool
 	computeCond = sync.NewCond(&computeMu)
 )
 
-// Raw JSON from resticprofile
+/* ─── JSON models ─────────────────────────────────────────────────────────── */
+
 type restoreJSON struct {
 	TotalSize      int64 `json:"total_size"`
 	TotalFileCount int64 `json:"total_file_count"`
@@ -48,16 +49,28 @@ type rawJSON struct {
 	SnapshotsCount       int64   `json:"snapshots_count"`
 }
 
-// API response
+type snapshotEntry struct {
+	Time  string   `json:"time"`  // RFC 3339
+	Paths []string `json:"paths"` // list of source paths
+}
+
+/* ─── API model ───────────────────────────────────────────────────────────── */
+
+type PathSnapshot struct {
+	Path         string `json:"path"`
+	LastSnapshot string `json:"last_snapshot"` // human readable
+}
+
 type ProfileStats struct {
+	// Identification
 	Name string `json:"name"`
 
-	// Restore‑size stats
+	// Restore‑size
 	RestoreBytes int64  `json:"restore_bytes"`
 	RestoreHuman string `json:"restore_human"`
 	RestoreFiles int64  `json:"restore_files"`
 
-	// Raw‑data stats
+	// Raw‑data
 	RawBytes               int64   `json:"raw_bytes"`
 	RawHuman               string  `json:"raw_human"`
 	UncompBytes            int64   `json:"uncompressed_bytes"`
@@ -69,15 +82,23 @@ type ProfileStats struct {
 	CompressionProgPct     int64   `json:"compression_progress"`
 	RawBlobs               int64   `json:"raw_blob_count"`
 
+	// Snapshot info
+	LastSnapshot string         `json:"last_snapshot"`
+	Paths        []PathSnapshot `json:"paths"`
+
 	// Common
 	Snapshots int64 `json:"snapshots"`
 }
+
+/* ─── init ────────────────────────────────────────────────────────────────── */
 
 func init() {
 	dataRoot = getenvOr("DATA_ROOT", "/data")
 	resticBinary = getenvOr("RESTICPROFILE_BINARY", "/usr/local/bin/resticprofile")
 	cacheSeconds = getCacheSeconds()
 }
+
+/* ─── main ────────────────────────────────────────────────────────────────── */
 
 func main() {
 	log.Printf("Data root: %s", dataRoot)
@@ -86,11 +107,11 @@ func main() {
 
 	http.HandleFunc("/stats", statsHandler)
 
-	log.Println("Listening on :8080 🚀")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		log.Fatalf("http server: %v", err)
-	}
+	log.Println("Listening on :8087 🚀")
+	log.Fatal(http.ListenAndServe(":8087", nil))
 }
+
+/* ─── HTTP handler & caching ──────────────────────────────────────────────── */
 
 func statsHandler(w http.ResponseWriter, r *http.Request) {
 	res, err := getStats()
@@ -103,6 +124,7 @@ func statsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func getStats() ([]ProfileStats, error) {
+	// quick cache check
 	cacheMu.RLock()
 	if time.Since(cachedAt) < time.Duration(cacheSeconds)*time.Second && cachedData != nil {
 		defer cacheMu.RUnlock()
@@ -110,10 +132,12 @@ func getStats() ([]ProfileStats, error) {
 	}
 	cacheMu.RUnlock()
 
+	// ensure only one generator runs
 	computeMu.Lock()
 	for computing {
 		computeCond.Wait()
 	}
+	// maybe someone else refreshed while we waited
 	cacheMu.RLock()
 	if time.Since(cachedAt) < time.Duration(cacheSeconds)*time.Second && cachedData != nil {
 		cacheMu.RUnlock()
@@ -142,6 +166,8 @@ func getStats() ([]ProfileStats, error) {
 	return stats, err
 }
 
+/* ─── stats generation ────────────────────────────────────────────────────── */
+
 func generateStats() ([]ProfileStats, error) {
 	entries, err := os.ReadDir(dataRoot)
 	if err != nil {
@@ -155,17 +181,27 @@ func generateStats() ([]ProfileStats, error) {
 		name := e.Name()
 		dirPath := filepath.Join(dataRoot, name)
 
+		// restore‑size
 		var restore restoreJSON
-		if err := runAndParse(dirPath, "restore-size", &restore); err != nil {
+		if err := runAndParse(dirPath, "stats", "restore-size", &restore); err != nil {
 			log.Printf("restore-size for %s: %v", dirPath, err)
 			continue
 		}
 
+		// raw‑data
 		var raw rawJSON
-		if err := runAndParse(dirPath, "raw-data", &raw); err != nil {
+		if err := runAndParse(dirPath, "stats", "raw-data", &raw); err != nil {
 			log.Printf("raw-data for %s: %v", dirPath, err)
 			continue
 		}
+
+		// snapshots
+		var snaps []snapshotEntry
+		if err := runAndParse(dirPath, "snapshots", "", &snaps); err != nil {
+			log.Printf("snapshots for %s: %v", dirPath, err)
+			continue
+		}
+		lastSnap, pathInfo := summariseSnapshots(snaps)
 
 		stats = append(stats, ProfileStats{
 			Name:                   name,
@@ -182,23 +218,34 @@ func generateStats() ([]ProfileStats, error) {
 			CompressionSavingHuman: fmt.Sprintf("%.2f%%", raw.CompressionSavingPct),
 			CompressionProgPct:     raw.CompressionProgress,
 			RawBlobs:               raw.TotalBlobCount,
-			Snapshots:              restore.SnapshotsCount,
+
+			LastSnapshot: lastSnap,
+			Paths:        pathInfo,
+
+			Snapshots: restore.SnapshotsCount,
 		})
 	}
 	return stats, nil
 }
 
-// runAndParse executes resticprofile in dir, streams logs, and parses first JSON line into v
-func runAndParse(dir, mode string, v interface{}) error {
-	cmd := exec.Command(resticBinary, "stats", "--mode", mode, "--json")
-	cmd.Dir = dir
+/* ─── helpers ─────────────────────────────────────────────────────────────── */
 
+// runAndParse executes `resticprofile <cmd> [--mode X] --json`, streams logs,
+// and unmarshals the first JSON object (or array) into v.
+func runAndParse(dir, cmdName, mode string, v interface{}) error {
+	args := []string{cmdName}
+	if mode != "" {
+		args = append(args, "--mode", mode)
+	}
+	args = append(args, "--json")
+
+	cmd := exec.Command(resticBinary, args...)
+	cmd.Dir = dir
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		return err
 	}
 	cmd.Stderr = os.Stderr
-
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -208,9 +255,9 @@ func runAndParse(dir, mode string, v interface{}) error {
 		line := scanner.Bytes()
 		os.Stdout.Write(line)
 		os.Stdout.Write([]byte{'\n'})
-		if len(line) > 0 && line[0] == '{' {
+		if len(line) > 0 && line[0] == '{' || (len(line) > 0 && line[0] == '[') {
 			if err := json.Unmarshal(line, v); err != nil {
-				return fmt.Errorf("decode %s JSON: %w", mode, err)
+				return fmt.Errorf("decode %s JSON: %w", cmdName, err)
 			}
 			break
 		}
@@ -221,7 +268,9 @@ func runAndParse(dir, mode string, v interface{}) error {
 	return cmd.Wait()
 }
 
-// human converts bytes to IEC units (KiB, MiB, GiB, TiB, …)
+/* human‑friendly byte formatter */
+type bytes float64
+
 func human(b bytes) string {
 	const unit = 1024.0
 	if b < unit {
@@ -233,8 +282,47 @@ func human(b bytes) string {
 	return fmt.Sprintf("%.2f %ciB", val, pre)
 }
 
-type bytes float64
+/* human‑friendly time formatter */
+func prettyTime(t time.Time) string {
+	diff := time.Since(t)
+	switch {
+	case diff < time.Minute:
+		return "just now"
+	case diff < time.Hour:
+		return fmt.Sprintf("%d min ago", int(diff.Minutes()))
+	case diff < 24*time.Hour:
+		return fmt.Sprintf("%.1f h ago", diff.Hours())
+	default:
+		return t.Format("2006‑01‑02 15:04")
+	}
+}
 
+/* summariseSnapshots picks latest snapshot and per‑path latest times */
+func summariseSnapshots(snaps []snapshotEntry) (string, []PathSnapshot) {
+	var latest time.Time
+	pathMap := map[string]time.Time{}
+	for _, s := range snaps {
+		t, err := time.Parse(time.RFC3339, s.Time)
+		if err != nil {
+			continue
+		}
+		if t.After(latest) {
+			latest = t
+		}
+		for _, p := range s.Paths {
+			if t.After(pathMap[p]) {
+				pathMap[p] = t
+			}
+		}
+	}
+	paths := make([]PathSnapshot, 0, len(pathMap))
+	for p, t := range pathMap {
+		paths = append(paths, PathSnapshot{Path: p, LastSnapshot: prettyTime(t)})
+	}
+	return prettyTime(latest), paths
+}
+
+/* env helpers */
 func getenvOr(key, def string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
