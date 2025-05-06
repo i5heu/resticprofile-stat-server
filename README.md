@@ -14,8 +14,16 @@ Optimized for low-overhead stats scraping and [Glance](https://github.com/glance
 
 For each subfolder inside a configured root (e.g. `/data/bar`, `/data/foo`), this server runs:
 
-- `resticprofile stats --mode restore-size --json`
-- `resticprofile stats --mode raw-data --json`
+1. `resticprofile stats --mode restore-size --json`
+2. `resticprofile stats --mode raw-data --json`
+3. `resticprofile snapshots --json`
+
+It merges all outputs, enriches them with:
+
+* **Human-readable sizes** (e.g. “4.26 TiB”)
+* **Compression ratio & savings** with 2-decimal precision (`"1.02"`, `"2.11%"`)
+* **Last snapshot age** (e.g. “15 min ago”)
+* **Per-path latest snapshot times**
 
 It parses the structured JSON output, combines it, and exposes the result at [http://0.0.0.0:8080/stats](http://localhost:8080/stats).
 
@@ -38,7 +46,12 @@ It parses the structured JSON output, combines it, and exposes the result at [ht
     "compression_space_saving_human": "2.11%",
     "compression_progress": 100,
     "raw_blob_count": 680045,
-    "snapshots": 22
+    "snapshots": 22,
+    "last_snapshot": "15 min ago",
+    "paths": [
+      {"path":"/data/test","last_snapshot":"15 min ago"},
+      {"path":"/data/test/subdir","last_snapshot":"2.3 h ago"}
+    ]
   }
 ]
 ```
