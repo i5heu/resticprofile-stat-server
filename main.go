@@ -186,21 +186,21 @@ func generateStats() ([]ProfileStats, error) {
 		// restore‑size
 		var restore restoreJSON
 		if err := runAndParse(dirPath, "stats", "restore-size", &restore); err != nil {
-			log.Printf("restore-size for %s: %v", dirPath, err)
+			fmt.Printf("restore-size for %s: %v", dirPath, err)
 			continue
 		}
 
 		// raw‑data
 		var raw rawJSON
 		if err := runAndParse(dirPath, "stats", "raw-data", &raw); err != nil {
-			log.Printf("raw-data for %s: %v", dirPath, err)
+			fmt.Printf("raw-data for %s: %v", dirPath, err)
 			continue
 		}
 
 		// snapshots
 		var snaps []snapshotEntry
 		if err := runAndParse(dirPath, "snapshots", "", &snaps); err != nil {
-			log.Printf("snapshots for %s: %v", dirPath, err)
+			fmt.Printf("snapshots for %s: %v", dirPath, err)
 			continue
 		}
 		lastSnap, pathInfo := summariseSnapshots(snaps)
