@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"net/http"
 	"os"
@@ -101,14 +100,14 @@ func init() {
 /* ─── main ────────────────────────────────────────────────────────────────── */
 
 func main() {
-	log.Printf("Data root: %s", dataRoot)
-	log.Printf("Resticprofile binary: %s", resticBinary)
-	log.Printf("Cache TTL: %ds", cacheSeconds)
+	fmt.Printf("Data root: %s", dataRoot)
+	fmt.Printf("Resticprofile binary: %s", resticBinary)
+	fmt.Printf("Cache TTL: %ds", cacheSeconds)
 
 	http.HandleFunc("/stats", statsHandler)
 
-	log.Println("Listening on :8080 🚀")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	fmt.Println("Listening on :8080 🚀")
+	fmt.Println(http.ListenAndServe(":8080", nil))
 }
 
 /* ─── HTTP handler & caching ──────────────────────────────────────────────── */
@@ -155,12 +154,14 @@ func getStats() ([]ProfileStats, error) {
 
 	cacheMu.Lock()
 	if err != nil {
+		fmt.Printf("DEBUG: generateStats() returned an error: %v. CACHE WILL NOT BE UPDATED.", err)
 		fmt.Printf("Error generating stats: %v\n", err)
-	}
-
-	if err == nil {
+	} else {
+		fmt.Println("DEBUG: generateStats() succeeded (err is nil). PROCEEDING TO UPDATE CACHE.")
 		cachedData = stats
+		originalCachedAt := cachedAt
 		cachedAt = time.Now()
+		fmt.Printf("DEBUG: CACHE UPDATED. Old cachedAt for this goroutine: %s, New cachedAt: %s. Time since new update: %s", originalCachedAt.Format(time.RFC3339Nano), cachedAt.Format(time.RFC3339Nano), time.Since(cachedAt))
 	}
 	cacheMu.Unlock()
 
