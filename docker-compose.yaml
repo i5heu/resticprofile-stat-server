@@ -1,9 +1,12 @@
 services:
   stats:
-    image: ghcr.io/i5heu/resticprofile-stat-server:latest
+    # image: ghcr.io/i5heu/resticprofile-stat-server:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     container_name: resticprofile-stat-server
     ports:
-      - "8080:8080"         
+      - "8086:8080"         
     environment:
       CACHE_SECONDS: "11700"  
     volumes:

@@ -126,6 +126,7 @@ func statsHandler(w http.ResponseWriter, r *http.Request) {
 func getStats() ([]ProfileStats, error) {
 	// quick cache check
 	cacheMu.RLock()
+	fmt.Println("Cache hit, checking if still valid", time.Since(cachedAt), "since last update", time.Duration(cacheSeconds)*time.Second, "cache seconds")
 	if time.Since(cachedAt) < time.Duration(cacheSeconds)*time.Second && cachedData != nil {
 		defer cacheMu.RUnlock()
 		return cachedData, nil
@@ -139,6 +140,7 @@ func getStats() ([]ProfileStats, error) {
 	}
 	// maybe someone else refreshed while we waited
 	cacheMu.RLock()
+	fmt.Println("Cache hit 2, checking if still valid", time.Since(cachedAt), "since last update", time.Duration(cacheSeconds)*time.Second, "cache seconds")
 	if time.Since(cachedAt) < time.Duration(cacheSeconds)*time.Second && cachedData != nil {
 		cacheMu.RUnlock()
 		computeMu.Unlock()
