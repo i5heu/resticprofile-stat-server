@@ -154,6 +154,10 @@ func getStats() ([]ProfileStats, error) {
 	stats, err := generateStats()
 
 	cacheMu.Lock()
+	if err != nil {
+		fmt.Printf("Error generating stats: %v\n", err)
+	}
+
 	if err == nil {
 		cachedData = stats
 		cachedAt = time.Now()
