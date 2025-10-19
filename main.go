@@ -246,6 +246,8 @@ func runAndParse(dir, cmdName, mode string, v interface{}) error {
 	}
 	args = append(args, "--json")
 
+	args = append(args, "--no-lock") // avoid setting locks during stats
+
 	cmd := exec.Command(resticBinary, args...)
 	cmd.Dir = dir
 	stdout, err := cmd.StdoutPipe()
