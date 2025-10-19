@@ -188,12 +188,18 @@ func generateStats() ([]ProfileStats, error) {
 		name := e.Name()
 		dirPath := filepath.Join(dataRoot, name)
 
+		// disable restore-size for now as it is very slow
 		// restore‑size
+		// var restore restoreJSON
+		// if err := runAndParse(dirPath, "stats", "restore-size", &restore); err != nil {
+		// 	fmt.Printf("restore-size for %s: %v", dirPath, err)
+		// 	continue
+		// }
+
 		var restore restoreJSON
-		if err := runAndParse(dirPath, "stats", "restore-size", &restore); err != nil {
-			fmt.Printf("restore-size for %s: %v", dirPath, err)
-			continue
-		}
+		restore.TotalSize = 0
+		restore.TotalFileCount = 0
+		restore.SnapshotsCount = 0
 
 		// raw‑data
 		var raw rawJSON
