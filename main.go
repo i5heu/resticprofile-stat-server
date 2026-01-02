@@ -20,6 +20,7 @@ var (
 	dataRoot     string
 	resticBinary string
 	cacheSeconds int
+	skipStats    bool
 
 	cacheMu    sync.RWMutex
 	cachedAt   time.Time
@@ -95,14 +96,16 @@ func init() {
 	dataRoot = getenvOr("DATA_ROOT", "/data")
 	resticBinary = getenvOr("RESTICPROFILE_BINARY", "/usr/local/bin/resticprofile")
 	cacheSeconds = getCacheSeconds()
+	skipStats = os.Getenv("SKIP_STATS") == "true"
 }
 
 /* ─── main ────────────────────────────────────────────────────────────────── */
 
 func main() {
-	fmt.Printf("Data root: %s", dataRoot)
-	fmt.Printf("Resticprofile binary: %s", resticBinary)
-	fmt.Printf("Cache TTL: %ds", cacheSeconds)
+	fmt.Printf("Data root: %s\n", dataRoot)
+	fmt.Printf("Resticprofile binary: %s\n", resticBinary)
+	fmt.Printf("Cache TTL: %ds\n", cacheSeconds)
+	fmt.Printf("Skip stats: %v\n", skipStats)
 
 	http.HandleFunc("/stats", statsHandler)
 
@@ -201,17 +204,23 @@ func generateStats() ([]ProfileStats, error) {
 		restore.TotalFileCount = 0
 		restore.SnapshotsCount = 0
 
-		// raw‑data
 		var raw rawJSON
-		if err := runAndParse(dirPath, "stats", "raw-data", &raw); err != nil {
-			fmt.Printf("raw-data for %s: %v", dirPath, err)
-			continue
+		if !skipStats {
+			// raw‑data (slow)
+			if err := runAndParse(dirPath, "stats", "raw-data", nil, &raw); err != nil {
+				fmt.Printf("raw-data for %s: %v\n", dirPath, err)
+				continue
+			}
 		}
 
-		// snapshots
+		// snapshots (use --latest 1 when skipping stats for faster response)
 		var snaps []snapshotEntry
-		if err := runAndParse(dirPath, "snapshots", "", &snaps); err != nil {
-			fmt.Printf("snapshots for %s: %v", dirPath, err)
+		var latestArg []string
+		if skipStats {
+			latestArg = []string{"--latest", "1"}
+		}
+		if err := runAndParse(dirPath, "snapshots", "", latestArg, &snaps); err != nil {
+			fmt.Printf("snapshots for %s: %v\n", dirPath, err)
 			continue
 		}
 		lastSnap, pathInfo := summariseSnapshots(snaps)
@@ -243,12 +252,15 @@ func generateStats() ([]ProfileStats, error) {
 
 /* ─── helpers ─────────────────────────────────────────────────────────────── */
 
-// runAndParse executes `resticprofile <cmd> [--mode X] --json`, streams logs,
+// runAndParse executes `resticprofile <cmd> [--mode X] [extraArgs...] --json`, streams logs,
 // and unmarshals the first JSON object (or array) into v.
-func runAndParse(dir, cmdName, mode string, v interface{}) error {
+func runAndParse(dir, cmdName, mode string, extraArgs []string, v interface{}) error {
 	args := []string{cmdName}
 	if mode != "" {
 		args = append(args, "--mode", mode)
+	}
+	if len(extraArgs) > 0 {
+		args = append(args, extraArgs...)
 	}
 	args = append(args, "--json")
 

@@ -59,11 +59,12 @@ It parses the structured JSON output, combines it, and exposes the result at [ht
 
 ## ⚙️ Configuration
 
-| Env Var                | Default          | Description                          |
-| ---------------------- | ---------------- | ------------------------------------ |
-| `DATA_ROOT`            | `/data`          | Where to scan for profile dirs       |
-| `RESTICPROFILE_BINARY` | `/resticprofile` | Path to the `resticprofile` binary   |
-| `CACHE_SECONDS`        | `600`            | How long to cache stats (in seconds) |
+| Env Var                | Default          | Description                                                                                                                                   |
+| ---------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `DATA_ROOT`            | `/data`          | Where to scan for profile dirs                                                                                                                |
+| `RESTICPROFILE_BINARY` | `/resticprofile` | Path to the `resticprofile` binary                                                                                                            |
+| `CACHE_SECONDS`        | `600`            | How long to cache stats (in seconds)                                                                                                          |
+| `SKIP_STATS`           | `false`          | Set to `true` to skip slow `resticprofile stats` commands and only run `snapshots --latest 1` for faster responses (no size/compression data) |
 
 
 ## Run It
