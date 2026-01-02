@@ -1,7 +1,6 @@
 ![Language](https://img.shields.io/github/languages/count/i5heu/resticprofile-stat-server)
 ![GitHub top language](https://img.shields.io/github/languages/top/i5heu/resticprofile-stat-server)
 ![GitHub release (latest by date)](https://img.shields.io/github/v/release/i5heu/resticprofile-stat-server)
-![Docker pulls](https://img.shields.io/docker/pulls/i5heu/resticprofile-stat-server)
 
 
 # resticprofile-stat-server
