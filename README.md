@@ -104,7 +104,7 @@ If you want to use this with [Glance](https://github.com/glanceapp/glance), you 
 ```yaml
 - type: custom-api
   title: Restic Stats
-  cache: 1m # REST API already cached ⇒ 1‑minute refresh is fine
+  cache: 5s # REST API already cached ⇒ 5 second refresh is fine
   url: http://localhost:8080/stats
   template: |
     <div class="space-vertical-10 list">
@@ -129,6 +129,34 @@ If you want to use this with [Glance](https://github.com/glanceapp/glance), you 
           <li><b>Uncompressed:</b> {{ .String "uncompressed_human" }}</li>
           <li><b>Restore Size:</b> {{ .String "restore_human" }}</li>
         </ul>
+
+        <!-- per‑path last snapshot list (collapses after 4 items) -->
+        <ul class="list list-gap-5 collapsible-container size-h6 margin-top-5" data-collapse-after="4">
+        {{ range .Array "paths" }}
+          <li><span class="color-muted">{{ .String "path" }}</span> – {{ .String "last_snapshot" }}</li>
+        {{ end }}
+        </ul>
+      </div>
+    {{ end }}
+    </div>
+```
+
+And without stats:
+```yaml
+- type: custom-api
+  title: Restic Stats
+  cache: 5s # REST API already cached ⇒ 5 second refresh is fine
+  url: http://localhost:8080/stats
+  template: |
+    <div class="space-vertical-10 list">
+    {{ range .JSON.Array "" }}
+      <!-- Profile card -->
+      <div class="card padding-10">
+        <!-- repo name & snapshot age -->
+        <div class="flex justify-between">
+          <div class="size-h4 color-highlight">{{ .String "name" }}</div>
+          <div class="size-h5 color-positive">{{ .String "last_snapshot" }}</div>
+        </div>
 
         <!-- per‑path last snapshot list (collapses after 4 items) -->
         <ul class="list list-gap-5 collapsible-container size-h6 margin-top-5" data-collapse-after="4">
